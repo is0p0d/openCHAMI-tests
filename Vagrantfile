@@ -23,6 +23,7 @@ Vagrant.configure("2") do |config|
         sudo openssl s_client -showcerts -servername mirrors.rockylinux.org -connect mirrors.rockylinux.org:443 2>/dev/null </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' >> ./tls-ca-bundle.pem
         chmod 600 ./tls-ca-bundle.pem
         echo "Certs set"
+
         echo "Downloading openCHAMI and installing associated packages..."
         curl --cacert /etc/pki/tls/certs/ca-bundle.trust.crt https://github.com/OpenCHAMI/deployment-recipes/archive/refs/heads/main.zip -OJL
         dnf install -y unzip jq yum-utils
@@ -30,10 +31,15 @@ Vagrant.configure("2") do |config|
         yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
         systemctl start docker
         echo "Done."
+
         echo "Unzipping openCHAMI..."
         unzip deployment-recipes-main.zip
+        echo "Done."
+        
+        echo "Configuring and starting openCHAMI..."
         cd deployment-recipes-main/quickstart/
         ./generate-configs.sh chamiTest
+        docker compose -f base.yml -f postgres.yml -f jwt-security.yml -f haproxy-api-gateway.yml -f  openchami-svcs.yml -f autocert.yml up -d
 
         # dnf update -y
 
