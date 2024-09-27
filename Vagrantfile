@@ -12,10 +12,13 @@ Vagrant.configure("2") do |config|
         qe.memory = "8G"
         qe.net_device = "virtio-net-pci"
         qe.ssh_port = "50023"
+        qe.extra_netdev_args = "id=intnet -device virtio-net-pci"
+        # qe.extra_netdev_args = "id=intnet -device virtio-net-pci,netdev=intnet,mac=f0:0e:82:8b:80:6a"
     end
     # config.vm.network "forwarded_port", guest: 8000, host: 8000, host_ip: "127.0.0.1"
     # config.vm.network "private_network", ip: "172.16.0.2"
     config.vm.provision "shell", inline: <<-SHELL #priviledged by default
+        # dnf update -y
         # Add SSL certificates from Netskope to Rocky's TLS certs so we can actually download stuff
         echo "Setting certs..."
         cd /etc/pki/ca-trust/extracted/pem/
@@ -25,6 +28,7 @@ Vagrant.configure("2") do |config|
         echo "Certs set"
 
         echo "Downloading openCHAMI and installing associated packages..."
+        cd ~
         curl --cacert /etc/pki/tls/certs/ca-bundle.trust.crt https://github.com/OpenCHAMI/deployment-recipes/archive/refs/heads/main.zip -OJL
         dnf install -y unzip jq yum-utils
         yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
@@ -36,12 +40,26 @@ Vagrant.configure("2") do |config|
         unzip deployment-recipes-main.zip
         echo "Done."
         
+        #Derived from the openCHAMI quickstart guide
         echo "Configuring and starting openCHAMI..."
         cd deployment-recipes-main/quickstart/
         ./generate-configs.sh chamiTest
         docker compose -f base.yml -f postgres.yml -f jwt-security.yml -f haproxy-api-gateway.yml -f  openchami-svcs.yml -f autocert.yml up -d
+        echo "Done."
 
-        # dnf update -y
+        echo "Obtaining rootca and tokens..."
+        source bash_functions.sh
+        get_ca_cert > cacert.pem
+        ACCESS_TOKEN=$(gen_access_token)
+        echo '127.0.0.1  $(hostname).openchami.cluster' | sudo tee -a /etc/hosts
+        curl --cacert cacert.pem -H "Authorization: Bearer $ACCESS_TOKEN" https://$(hostname).openchami.cluster:8443/hsm/v2/State/Components
+        echo "Creating a dedicated token for dnsmasq..."
+        echo "DNSMASQ_ACCESS_TOKEN=$(gen_access_token)" >> .env
+        docker compose -f base.yml -f postgres.yml -f jwt-security.yml -f haproxy-api-gateway.yml -f openchami-svcs.yml -f autocert.yml -f dnsmasq.yml up -d
+        echo "Done..."
+
+        echo "****************************************"
+        echo "You should now be able to ssh into the box and explore openCHAMI"
 
     SHELL
 end
