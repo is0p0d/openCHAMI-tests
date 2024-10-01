@@ -59,7 +59,6 @@ Vagrant.configure("2") do |config|
             
             echo "****************************************"
             echo "You should now be able to ssh into the box and explore openCHAMI" 
-
         SHELL
     end
     config.vm.define "node1" do |node1|
